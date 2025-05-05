@@ -1,0 +1,858 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Material Management System</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #e8f5e9;
+    }
+    header {
+      background-color: #2e7d32;
+      color: white;
+      padding: 15px 30px;
+      font-size: 1.5rem;
+    }
+    nav {
+      background-color: #4caf50;
+      padding: 10px 20px;
+      display: flex;
+      gap: 15px;
+    }
+    nav a {
+      color: white;
+      text-decoration: none;
+      font-weight: bold;
+      padding: 8px;
+    }
+    nav a:hover, nav a:focus {
+      text-decoration: underline;
+      outline: 2px solid #fff;
+      background-color: #388e3c;
+    }
+    .container {
+      padding: 20px;
+      max-width: 1200px;
+      margin: auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .hidden {
+      display: none;
+    }
+    .button {
+      background-color: #4caf50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px 5px;
+      font-size: 14px;
+      transition: background-color 0.3s;
+    }
+    .button:hover, .button:focus {
+      background-color: #388e3c;
+      outline: 2px solid #fff;
+    }
+    .button:disabled {
+      background-color: #b0bec5;
+      cursor: not-allowed;
+    }
+    .delete-button {
+      background-color: #d32f2f;
+      color: white;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .delete-button:hover, .delete-button:focus {
+      background-color: #b71c1c;
+      outline: 2px solid #fff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #c8e6c9;
+      padding: 8px;
+      text-align: left;
+      font-size: 14px;
+    }
+    th {
+      background-color: #c8e6c9;
+      color: #1b5e20;
+    }
+    .scroll-table {
+      overflow-x: auto;
+    }
+    h2 {
+      color: #1b5e20;
+    }
+    .error {
+      color: #d32f2f;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .success {
+      color: #2e7d32;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .form-container {
+      background-color: #f1f8e9;
+      padding: 15px;
+      border: 1px solid #c8e6c9;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .form-elements {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .form-container label {
+      display: block;
+      margin: 5px 0;
+      font-weight: bold;
+      color: #1b5e20;
+    }
+    .form-container input, .form-container select {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #c8e6c9;
+      border-radius: 4px;
+      box-sizing: border-box;
+      background-color: #ffffff;
+    }
+    .form-container input:invalid {
+      border-color: #d32f2f;
+    }
+    @media (max-width: 600px) {
+      .container {
+        padding: 10px;
+        margin: 10px;
+      }
+      .button, .delete-button {
+        width: 100%;
+        margin: 5px 0;
+      }
+      nav {
+        flex-direction: column;
+        gap: 10px;
+      }
+      header {
+        font-size: 1.2rem;
+        padding: 10px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header id="main-header">Material Management System</header>
+
+  <nav role="navigation" aria-label="Main navigation">
+    <a href="#" onclick="showPage(event, 'home')" aria-label="Go to Home page">Home</a>
+    <a href="#" onclick="showPage(event, 'departments')" aria-label="Go to Departments page">Departments</a>
+  </nav>
+
+  <div class="container">
+    <div id="home" role="main" aria-labelledby="home-heading">
+      <h2 id="home-heading">Welcome!</h2>
+      <p>This system helps manage procurement processes through the following departments:</p>
+      <ul>
+        <li>Indent Department</li>
+        <li>RFQ Department</li>
+        <li>RFQ Compression Department</li>
+        <li>Purchase Order Department</li>
+        <li>Goods Receipt Department</li>
+      </ul>
+      <button class="button" onclick="showPage(null, 'departments')" aria-label="Navigate to Departments page">Go to Departments</button>
+    </div>
+
+    <div id="departments" class="hidden" role="main" aria-labelledby="departments-heading">
+      <h2 id="departments-heading">Select a Department</h2>
+      <div id="deptButtons" role="toolbar" aria-label="Department selection buttons"></div>
+      <div id="dataEntryForm" class="hidden form-container">
+        <h3 id="form-heading">Enter Indent Data</h3>
+        <form id="indentForm" class="form-elements" aria-labelledby="form-heading"></form>
+      </div>
+      <div id="rfqEntryForm" class="hidden form-container">
+        <h3 id="rfq-form-heading">Enter RFQ Data</h3>
+        <form id="rfqForm" class="form-elements" aria-labelledby="rfq-form-heading"></form>
+      </div>
+      <div id="exportDiv" class="hidden">
+        <button class="button" onclick="exportTableToCSV()" aria-label="Export table to CSV">Export Table to CSV</button>
+      </div>
+      <p id="noTablePrompt" class="error">Please select a department to view data (enter data for Indent Department or RFQ Department, or approve RFQs in RFQ Compression Department).</p>
+      <p id="successMessage" class="success hidden"></p>
+      <div class="scroll-table">
+        <table id="tableDisplay" class="hidden" role="grid" aria-label="Department data table">
+          <thead>
+            <tr id="tableHead"></tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configuration
+    const CONFIG = {
+      departments: {
+        "Indent Department": [
+          "Type of Material", "SL No", "Entry Date", "Required at", "Plant",
+          "Indent No", "Indent Date", "Indent by", "Indent Item No",
+          "Item of Work", "Material Specification", "Unit Weight/Density",
+          "Thickness", "Width", "Length", "Quantity", "Quantity - Rq KG", "UoM", "MR No"
+        ],
+        "RFQ Department": [
+          "RFQ No", "RFQ Date", "Vendor Codes", "Name of the Vendor", "Location",
+          "Project", "MR No", "MR Date", "Item No of MR", "Type of Material",
+          "Material Code", "Material Description", "MR Qty", "RFQ Qty", "UoM",
+          "RFQ Unit Price", "Base Amount", "GST", "Total Amount", "Indent BY",
+          "Delivery Time: Estimated Time of Delivery", "RFQ Received BY", "Approval Status"
+        ],
+        "RFQ Compression Department": [
+          "MR No", "RFQ No", "Vendor Code", "Vendor Name", "Material Code",
+          "Material Description", "Unit Price", "Amount", "Rank", "Percentage",
+          "Lead Time Comparison", "Action"
+        ],
+        "Purchase Order Department": [
+          "Location", "Project", "Purchasing Group", "PO Number", "PO Date",
+          "PO Item No", "Item of Work", "Description of Material",
+          "Unit Weight/Density", "Thickness", "Width", "Length in mm",
+          "PO Qty / PO Wt.", "UoM", "Unit Price", "Amount", "GST", "Total Amount",
+          "Material Dispatch Date", "Remarks", "PO Done BY", "Usance Period",
+          "Payment Terms (LC or Cash)"
+        ],
+        "Goods Receipt Department": [
+          "Location", "Project", "Purchasing Group", "PO Number", "PO Date",
+          "PO Item No", "Item of Work", "Description of Material", "Unit Weight/Density",
+          "Thickness", "Width", "Length in mm", "PO Qty / PO Wt.", "UoM",
+          "Unit Price", "Amount", "GST", "Total Amount", "Material Dispatch Date",
+          "Remarks", "PO Done BY", "Type of Material", "SL No", "Entry Date",
+          "Required at", "Plant", "Indent No", "Indent Date", "Indent by",
+          "MR Item No/PO Item No", "Material Specification", "Quantity",
+          "Quantity - Rq KG", "Material Type", "Received Quantity-1"
+        ]
+      },
+      options: {
+        materialTypes: [
+          "Raw Material", "Steel", "Spares", "Consumable", "Tools & Tackles", "Assets"
+        ],
+        requiredAt: [
+          "Tehri PSP", "Pakaldul", "VPHEP", "Kiru", "Teesta-VI", "Suratgarh",
+          "Singrauli", "Bridge & Roof Works", "Singareni", "Gorakhpur", "Jhajjar",
+          "Kwar HEP", "Kudankulam", "Rangit-IV", "Lower Sileru", "Bhutan",
+          "Dibang", "Kutehr", "Ratle", "General"
+        ],
+        plants: [
+          "Balanagar", "Kandlakoya", "Kathua", "Bhilai", "Sitarganj", "Dimbuk",
+          "Tehri PSP", "Pakaldul", "VPHEP", "Kiru", "Teesta-VI", "Suratgarh",
+          "Singrauli", "Bridge & Roof Works", "Singareni", "Gorakhpur square-bracket-placeholder", "Jhajjar",
+          "Kwar HEP", "Kudankulam", "Rangit-IV", "Lower Sileru", "Bhutan",
+          "Dibang", "Kutehr", "Ratle", "General"
+        ],
+        indentBy: [
+          "Vikas Yadav", "Satya Prasad", "Vamsi", "Prakash", "Biswajit Chatterjee",
+          "Vishnuvardan", "Mahender", "Ashraf Khan", "Kiru/Sitarganj/24-25/197",
+          "Ramu", "Priyaranjan Pandey", "Ramesh.I", "SVSS Raju", "P.S Rao",
+          "Krishna Rao", "D RAMU"
+        ],
+        uom: [
+          "M", "KG", "M2", "L", "PAC", "FT2", "FT3", "ROL", "BAG", "PAA",
+          "SET", "CV", "BT", "ML", "CAN", "NO", "KGT", "CYL", "CM", "MT"
+        ],
+        materialSpecs: [
+          "Buffing Wheels Cup Type 100mm", "Buffing Wheels Cup Type 125mm",
+          "Nut SS M24"
+        ],
+        vendors: [
+          "Vendor A", "Vendor B", "Vendor C", "Vendor D", "Vendor E",
+          "Acme Supplies", "Global Traders", "Tech Materials", "Prime Vendors", "Elite Distributors"
+        ]
+      }
+    };
+
+    // State
+    let state = {
+      currentDept: "",
+      tableData: {
+        "Indent Department": [],
+        "RFQ Department": [],
+        "Purchase Order Department": [],
+        "RFQ Compression Department": [],
+        "Goods Receipt Department": []
+      },
+      asOnRFQs: [],
+      mrCounter: 1000
+    };
+
+    // DOM Elements
+    const DOM = {
+      tableHead: document.getElementById('tableHead'),
+      tableBody: document.getElementById('tableBody'),
+      tableDisplay: document.getElementById('tableDisplay'),
+      buttonsDiv: document.getElementById('deptButtons'),
+      exportDiv: document.getElementById('exportDiv'),
+      noTablePrompt: document.getElementById('noTablePrompt'),
+      dataEntryForm: document.getElementById('dataEntryForm'),
+      indentForm: document.getElementById('indentForm'),
+      rfqEntryForm: document.getElementById('rfqEntryForm'),
+      rfqForm: document.getElementById('rfqForm'),
+      successMessage: document.getElementById('successMessage')
+    };
+
+    // Utility Functions
+    function sanitizeInput(input) {
+      const div = document.createElement('div');
+      div.textContent = input;
+      return div.innerHTML;
+    }
+
+    function showSuccess(message) {
+      DOM.successMessage.textContent = message;
+      DOM.successMessage.classList.remove('hidden');
+      setTimeout(() => DOM.successMessage.classList.add('hidden'), 3000);
+    }
+
+    function showError(message) {
+      DOM.noTablePrompt.textContent = message;
+      DOM.noTablePrompt.classList.remove('hidden');
+    }
+
+    // File Handling (Existing XLSX Processing)
+    const fileHandler = {
+      isXlsx: false,
+      xlsxFileLookup: {},
+      fileData: {},
+      filledCell(cell) {
+        return cell !== '' && cell != null;
+      },
+      loadFileData(filename) {
+        if (this.isXlsx && this.xlsxFileLookup[filename]) {
+          try {
+            const workbook = XLSX.read(this.fileData[filename], { type: 'base64' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+            const filteredData = jsonData.filter(row => row.some(this.filledCell));
+            let headerRowIndex = filteredData.findIndex((row, index) =>
+              row.filter(this.filledCell).length >= filteredData[index + 1]?.filter(this.filledCell).length
+            );
+            if (headerRowIndex === -1 || headerRowIndex > 25) {
+              headerRowIndex = 0;
+            }
+            const csv = XLSX.utils.sheet_to_csv(XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)), { header: 1 });
+            return csv;
+          } catch (e) {
+            console.error('Error processing XLSX:', e);
+            return "";
+          }
+        }
+        return this.fileData[filename] || "";
+      }
+    };
+
+    // Form Generation for Indent Department
+    function generateIndentForm() {
+      DOM.indentForm.innerHTML = '';
+      const cols = CONFIG.departments["Indent Department"].slice(0, -1);
+      (cols || []).forEach((col, index) => {
+        const label = document.createElement('label');
+        label.textContent = col;
+        label.setAttribute('for', `indent-field-${index}`);
+
+        let input;
+        const commonAttrs = {
+          id: `indent-field-${index}`,
+          'aria-label': `Enter ${col}`,
+          required: col.includes("Quantity") || col.includes("Material Specification")
+        };
+
+        if (["Type of Material", "Required at", "Plant", "Indent by", "UoM", "Material Specification"].includes(col)) {
+          input = document.createElement('select');
+          const options = CONFIG.options[col.toLowerCase().replace(/ /g, '')] || CONFIG.options.materialSpecs || [];
+          options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt;
+            option.textContent = opt;
+            input.appendChild(option);
+          });
+        } else {
+          input = document.createElement('input');
+          if (col.includes("Date")) {
+            input.type = "date";
+            input.max = new Date().toISOString().split('T')[0];
+          } else if (["Qty", "Quantity", "Weight", "Thickness", "Width", "Length"].some(s => col.includes(s))) {
+            input.type = "number";
+            input.min = "0";
+            input.step = "0.01";
+          } else {
+            input.type = "text";
+            input.pattern = "[A-Za-z0-9\\s\\-/]*";
+          }
+        }
+
+        Object.assign(input, commonAttrs);
+        DOM.indentForm.appendChild(label);
+        DOM.indentForm.appendChild(input);
+      });
+
+      const submitBtn = document.createElement('button');
+      submitBtn.textContent = "Submit";
+      submitBtn.className = 'button';
+      submitBtn.type = 'submit';
+      submitBtn.setAttribute('aria-label', 'Submit Indent Data');
+      DOM.indentForm.appendChild(submitBtn);
+      DOM.indentForm.onsubmit = handleIndentFormSubmit;
+    }
+
+    // Form Generation for RFQ Department
+    function generateRFQForm() {
+      DOM.rfqForm.innerHTML = '';
+      const cols = CONFIG.departments["RFQ Department"] || [];
+      cols.forEach((col, index) => {
+        const label = document.createElement('label');
+        label.textContent = col;
+        label.setAttribute('for', `rfq-field-${index}`);
+
+        let input;
+        const commonAttrs = {
+          id: `rfq-field-${index}`,
+          'aria-label': `Enter ${col}`,
+          required: ["RFQ No", "MR No", "Name of the Vendor", "RFQ Qty"].includes(col)
+        };
+
+        if (col === "MR No") {
+          input = document.createElement('select');
+          input.addEventListener('change', (e) => autoPopulateRFQFields(e.target.value));
+          const indentData = state.tableData["Indent Department"] || [];
+          if (indentData.length === 0) {
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "No MR Nos available";
+            input.appendChild(option);
+            input.disabled = true;
+          } else {
+            indentData.forEach(row => {
+              const mrNo = row[row.length - 1];
+              if (mrNo) {
+                const option = document.createElement('option');
+                option.value = mrNo;
+                option.textContent = mrNo;
+                input.appendChild(option);
+              }
+            });
+          }
+        } else if (col === "Name of the Vendor") {
+          input = document.createElement('select');
+          (CONFIG.options.vendors || []).forEach(vendor => {
+            const option = document.createElement('option');
+            option.value = vendor;
+            option.textContent = vendor;
+            input.appendChild(option);
+          });
+        } else if (["Type of Material", "UoM"].includes(col)) {
+          input = document.createElement('select');
+          const options = CONFIG.options[col.toLowerCase().replace(/ /g, '')] || [];
+          options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt;
+            option.textContent = opt;
+            input.appendChild(option);
+          });
+        } else {
+          input = document.createElement('input');
+          if (col.includes("Date")) {
+            input.type = "date";
+            input.max = new Date().toISOString().split('T')[0];
+          } else if (["Qty", "Quantity", "Price", "Amount"].some(s => col.includes(s))) {
+            input.type = "number";
+            input.min = "0";
+            input.step = "0.01";
+          } else {
+            input.type = "text";
+            input.pattern = "[A-Za-z0-9\\s\\-/]*";
+          }
+        }
+
+        Object.assign(input, commonAttrs);
+        DOM.rfqForm.appendChild(label);
+        DOM.rfqForm.appendChild(input);
+      });
+
+      const submitBtn = document.createElement('button');
+      submitBtn.textContent = "Submit";
+      submitBtn.className = 'button';
+      submitBtn.type = 'submit';
+      submitBtn.setAttribute('aria-label', 'Submit RFQ Data');
+      DOM.rfqForm.appendChild(submitBtn);
+      DOM.rfqForm.onsubmit = handleRFQFormSubmit;
+    }
+
+    // Auto-populate RFQ Form Fields
+    function autoPopulateRFQFields(mrNo) {
+      const indentRow = (state.tableData["Indent Department"] || []).find(row => row[row.length - 1] === mrNo);
+      if (!indentRow) return;
+
+      const fields = CONFIG.departments["RFQ Department"] || [];
+      const inputs = DOM.rfqForm.querySelectorAll('input, select') || [];
+      fields.forEach((col, index) => {
+        if (index >= inputs.length) return;
+        const input = inputs[index];
+        if (col === "Type of Material") input.value = indentRow[0] || '';
+        if (col === "Material Description") input.value = indentRow[10] || '';
+        if (col === "MR Qty") input.value = indentRow[15] || '';
+        if (col === "UoM") input.value = indentRow[17] || '';
+        if (col === "Indent BY") input.value = indentRow[7] || '';
+        if (col === "MR Date") input.value = indentRow[6] || '';
+        if (col === "Item No of MR") input.value = indentRow[8] || '';
+        if (col === "Location") input.value = indentRow[3] || '';
+      });
+    }
+
+    // Indent Form Submission
+    function handleIndentFormSubmit(event) {
+      event.preventDefault();
+      if (state.currentDept !== "Indent Department") {
+        showError('Data entry is only available for the Indent Department.');
+        return;
+      }
+
+      const inputs = DOM.indentForm.querySelectorAll('input, select') || [];
+      const rowData = Array.from(inputs).map(input => sanitizeInput(input.value) || '-');
+      if (rowData.every(val => val === '-')) {
+        showError('Please enter at least one value.');
+        return;
+      }
+
+      const mrNo = `MR${state.mrCounter++}`;
+      rowData.push(mrNo);
+      state.tableData["Indent Department"].push(rowData);
+
+      const rfqRow = (CONFIG.departments["RFQ Department"] || []).map(col => {
+        if (col === "MR No") return mrNo;
+        if (col === "Type of Material") return rowData[0];
+        if (col === "Material Description") return rowData[10];
+        if (col === "MR Qty") return rowData[15];
+        if (col === "UoM") return rowData[17];
+        if (col === "Indent BY") return rowData[7];
+        if (col === "MR Date") return rowData[6];
+        if (col === "Item No of MR") return rowData[8];
+        if (col === "Location") return rowData[3];
+        return "-";
+      });
+      state.tableData["RFQ Department"].push(rfqRow);
+
+      showTable("Indent Department");
+      DOM.indentForm.reset();
+      showSuccess(`Indent submitted with MR No ${mrNo}. Data sent to RFQ Department.`);
+    }
+
+    // RFQ Form Submission
+    function handleRFQFormSubmit(event) {
+      event.preventDefault();
+      if (state.currentDept !== "RFQ Department") {
+        showError('Data entry is only available for the RFQ Department.');
+        return;
+      }
+
+      const inputs = DOM.rfqForm.querySelectorAll('input, select') || [];
+      const rowData = Array.from(inputs).map(input => sanitizeInput(input.value) || '-');
+      if (rowData.every(val => val === '-')) {
+        showError('Please enter at least one value.');
+        return;
+      }
+
+      state.tableData["RFQ Department"].push(rowData);
+      showTable("RFQ Department");
+      DOM.rfqForm.reset();
+      showSuccess('RFQ data successfully added.');
+    }
+
+    // Delete Row
+    function deleteRow(deptName, rowIndex) {
+      if (!confirm(`Are you sure you want to delete this ${deptName} row?`)) return;
+
+      if (deptName === "Indent Department") {
+        const mrNo = state.tableData["Indent Department"][rowIndex][CONFIG.departments["Indent Department"].length - 1];
+        state.tableData["Indent Department"].splice(rowIndex, 1);
+        state.tableData["RFQ Department"] = (state.tableData["RFQ Department"] || []).filter(row => row[6] !== mrNo);
+        showSuccess(`Indent row with MR No ${mrNo} and associated RFQ rows deleted.`);
+      } else if (deptName === "RFQ Department") {
+        state.tableData["RFQ Department"].splice(rowIndex, 1);
+        showSuccess('RFQ row deleted.');
+      }
+
+      showTable(deptName);
+    }
+
+    // Sample Data Generation
+    function generateSampleData(deptName) {
+      const cols = CONFIG.departments[deptName] || [];
+      const sampleRows = [];
+      for (let i = 0; i < 3; i++) {
+        const row = cols.map(col => {
+          if (col === "Action") return "";
+          if (col.includes("No") || col.includes("Code")) return `X${i + 1}000${i + 1}`;
+          if (col.includes("Date")) return `2025-04-${10 + i}`;
+          if (col.includes("Qty") || col.includes("Quantity")) return `${100 + i * 10}`;
+          if (col.includes("Price") || col.includes("Amount")) return `${1000 + i * 100}`;
+          if (col.includes("Name") || col.includes("by")) return `User${i + 1}`;
+          if (col.includes("UoM")) return "KG";
+          if (col.includes("Status")) return ["Pending", "Approved", "Rejected"][i];
+          if (col.includes("Rank")) return `${i + 1}`;
+          if (col.includes("Percentage")) return `${90 + i}%`;
+          return `Sample ${col} ${i + 1}`;
+        });
+        sampleRows.push(row);
+      }
+      return sampleRows;
+    }
+
+    // Table Rendering
+    function showTable(deptName) {
+      state.currentDept = deptName;
+      const cols = CONFIG.departments[deptName] || [];
+      let data = [];
+
+      if (deptName === "Indent Department") {
+        generateIndentForm();
+        data = state.tableData[deptName] || [];
+      } else if (deptName === "RFQ Department") {
+        generateRFQForm();
+        data = [...generateSampleData(deptName), ...(state.tableData[deptName] || [])];
+      } else if (deptName === "Purchase Order Department") {
+        data = [...generateSampleData(deptName), ...(state.tableData[deptName] || [])];
+      } else if (deptName === "RFQ Compression Department") {
+        data = generateSampleData(deptName).map((row, index) => {
+          const isApproved = (state.asOnRFQs || []).some(asOn => asOn[1] === row[1] && asOn[8] === "Approved");
+          return [...row.slice(0, 8), isApproved ? "Approved" : row[8], row[9], row[10], ""];
+        });
+      } else {
+        data = generateSampleData(deptName);
+      }
+
+      DOM.tableHead.innerHTML = '';
+      DOM.tableBody.innerHTML = '';
+
+      const headers = deptName === "Indent Department" || deptName === "RFQ Department" ? [...cols, "Actions"] : cols;
+      headers.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        th.setAttribute('scope', 'col');
+        DOM.tableHead.appendChild(th);
+      });
+
+      (data || []).forEach((rowData, rowIndex) => {
+        const tr = document.createElement('tr');
+        rowData.forEach((cellData, colIndex) => {
+          const td = document.createElement('td');
+          if (deptName === "RFQ Compression Department" && colIndex === cols.length - 1) {
+            const isApproved = (state.asOnRFQs || []).some(asOn => asOn[1] === rowData[1] && asOn[8] === "Approved");
+            if (!isApproved) {
+              const btn = document.createElement('button');
+              btn.textContent = "Approve";
+              btn.className = 'button';
+              btn.setAttribute('aria-label', `Approve RFQ ${rowData[1]}`);
+              btn.onclick = () => approveRFQ(rowIndex);
+              td.appendChild(btn);
+            } else {
+              td.textContent = "Approved";
+            }
+          } else {
+            td.textContent = cellData;
+          }
+          tr.appendChild(td);
+        });
+
+        if (deptName === "Indent Department" || deptName === "RFQ Department") {
+          const actionTd = document.createElement('td');
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = "Delete";
+          deleteBtn.className = 'delete-button';
+          deleteBtn.setAttribute('aria-label', `Delete row ${rowIndex + 1}`);
+          deleteBtn.onclick = () => deleteRow(deptName, rowIndex);
+          actionTd.appendChild(deleteBtn);
+          tr.appendChild(actionTd);
+        }
+
+        DOM.tableBody.appendChild(tr);
+      });
+
+      DOM.tableDisplay.classList.toggle('hidden', data.length === 0 && deptName !== "Indent Department" && deptName !== "RFQ Department");
+      DOM.exportDiv.classList.toggle('hidden', data.length === 0);
+      DOM.dataEntryForm.classList.toggle('hidden', deptName !== "Indent Department");
+      DOM.rfqEntryForm.classList.toggle('hidden', deptName !== "RFQ Department");
+      DOM.noTablePrompt.classList.toggle('hidden', data.length > 0 || deptName === "Indent Department" || deptName === "RFQ Department");
+    }
+
+    // RFQ Approval
+    function approveRFQ(rowIndex) {
+      const data = generateSampleData("RFQ Compression Department")[rowIndex] || [];
+      state.asOnRFQs.push([...data.slice(0, -1), "Approved"]);
+
+      const poRow = (CONFIG.departments["Purchase Order Department"] || []).map(col => {
+        if (col === "Description of Material") return data[5] || "TBD";
+        if (col === "Unit Price") return data[6] || "0";
+        if (col === "Amount") return data[7] || "0";
+        if (col === "UoM") return "KG";
+        if (col === "PO Qty / PO Wt.") return "100";
+        if (col === "PO Number") return `PO${state.asOnRFQs.length}`;
+        if (col === "PO Date") return new Date().toISOString().split('T')[0];
+        if (col === "PO Done BY") return "User1";
+        return "TBD";
+      });
+
+      state.tableData["Purchase Order Department"].push(poRow);
+      showTable("RFQ Compression Department");
+      showSuccess(`RFQ approved and sent to Purchase Order Department as PO${state.asOnRFQs.length}.`);
+    }
+
+    // Page Navigation
+    function showPage(event, pageId) {
+      if (event) event.preventDefault();
+      document.getElementById('home').classList.add('hidden');
+      document.getElementById('departments').classList.add('hidden');
+      document.getElementById(pageId).classList.remove('hidden');
+
+      if (pageId === 'departments') {
+        if (!state.currentDept) {
+          DOM.tableDisplay.classList.add('hidden');
+          DOM.exportDiv.classList.add('hidden');
+          DOM.dataEntryForm.classList.add('hidden');
+          DOM.rfqEntryForm.classList.add('hidden');
+          DOM.noTablePrompt.classList.remove('hidden');
+        } else {
+          showTable(state.currentDept);
+        }
+      } else {
+        DOM.tableDisplay.classList.add('hidden');
+        DOM.exportDiv.classList.add('hidden');
+        DOM.dataEntryForm.classList.add('hidden');
+        DOM.rfqEntryForm.classList.add('hidden');
+        DOM.noTablePrompt.classList.add('hidden');
+      }
+    }
+
+    // CSV Export
+    function exportTableToCSV() {
+      if (!state.currentDept || DOM.tableDisplay.classList.contains('hidden')) {
+        showError('Please select a department to export the table.');
+        return;
+      }
+
+      const headers = (CONFIG.departments[state.currentDept] || []).filter(col => col !== "Action");
+      const csvRows = [headers.map(h => `"${h}"`).join(',')];
+      let data = [];
+
+      if (state.currentDept === "Indent Department") {
+        data = state.tableData[state.currentDept] || [];
+        if (data.length === 0) {
+          showError('No data available to export for Indent Department. Please enter data first.');
+          return;
+        }
+      } else if (state.currentDept === "RFQ Department") {
+        data = [...generateSampleData(state.currentDept), ...(state.tableData[state.currentDept] || [])];
+        if (data.length === 0) {
+          showError('No data available to export for RFQ Department. Please enter data first.');
+          return;
+        }
+      } else if (state.currentDept === "Purchase Order Department") {
+        data = [...generateSampleData(state.currentDept), ...(state.tableData[state.currentDept] || [])];
+      } else if (state.currentDept === "RFQ Compression Department") {
+        data = generateSampleData(state.currentDept).map(row => {
+          const isApproved = (state.asOnRFQs || []).some(asOn => asOn[1] === row[1] && asOn[8] === "Approved");
+          return [...row.slice(0, 8), isApproved ? "Approved" : row[8], row[9], row[10]];
+        });
+      } else {
+        data = generateSampleData(state.currentDept);
+      }
+
+      data.forEach(row => {
+        const cells = row.slice(0, headers.length).map(cell => `"${cell.replace(/"/g, '""')}"`);
+        csvRows.push(cells.join(','));
+      });
+
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${state.currentDept.replace(/ /g, "_")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showSuccess('Table exported successfully.');
+    }
+
+    // Initialize
+    function init() {
+      const departments = Object.keys(CONFIG.departments || {});
+      departments.forEach(name => {
+        const btn = document.createElement('button');
+        btn.textContent = name;
+        btn.className = 'button';
+        btn.setAttribute('aria-label', `View ${name} table`);
+        btn.onclick = () => showTable(name);
+        DOM.buttonsDiv.appendChild(btn);
+      });
+      showPage(null, 'home');
+    }
+
+    // Start Application
+    init();
+  </script>
+</body>
+</html>
